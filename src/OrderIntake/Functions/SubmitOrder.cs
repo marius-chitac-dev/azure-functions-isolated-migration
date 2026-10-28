@@ -20,6 +20,12 @@ public sealed class SubmitOrder(ILogger<SubmitOrder> logger)
             // ASP.NET Core integration.
             request = await req.ReadFromJsonAsync<OrderRequest>(req.HttpContext.RequestAborted);
         }
+        catch (InvalidOperationException)
+        {
+            // No JSON Content-Type, or a charset that isn't a known encoding. The in-process version
+            // read any body; ReadFromJsonAsync refuses these, which would otherwise surface as a 500.
+            return new SubmitOrderOutput { Result = new UnsupportedMediaTypeResult() };
+        }
         catch (JsonException)
         {
             request = null;
