@@ -7,7 +7,7 @@ A small but realistic Azure Functions app, kept in two states so the migration c
 | `before-inprocess` | In-process (`Microsoft.NET.Sdk.Functions`) | 8 |
 | `after-isolated` | Isolated worker (`Azure.Functions.Sdk`) | 10 |
 
-**You are on `before-inprocess`.** This is the starting point. Microsoft ends support for the in-process model on 10 November 2026.
+Microsoft ends support for the in-process model on 10 November 2026.
 
 ## What the app does
 
@@ -30,14 +30,14 @@ It is deliberately small, but it touches the parts that make real migrations har
 ## Layout
 
 ```
-src/OrderIntake         Function app (triggers, DI, host.json)
+src/OrderIntake         Function app (triggers, Program.cs, host.json)
 src/OrderIntake.Core    Request/message models and validation, no Functions dependency
 tests/OrderIntake.Tests Validation and request-contract tests
 ```
 
 ## Run locally
 
-Requirements: .NET 8 SDK, Azure Functions Core Tools v4, Azurite, a Service Bus namespace with an `orders` queue, and a Cosmos DB account with database `shop` and container `orders` (partition key `/customerId`).
+Requirements: .NET 10 SDK, Azure Functions Core Tools v4, Azurite, a Service Bus namespace with an `orders` queue, and a Cosmos DB account with database `shop` and container `orders` (partition key `/customerId`).
 
 ```bash
 cp src/OrderIntake/local.settings.example.json src/OrderIntake/local.settings.json

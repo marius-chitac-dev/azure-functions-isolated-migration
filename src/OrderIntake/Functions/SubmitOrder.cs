@@ -1,27 +1,24 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using OrderIntake.Core;
 
 namespace OrderIntake.Functions;
 
-public sealed class SubmitOrder
+public sealed class SubmitOrder(ILogger<SubmitOrder> logger)
 {
-    [FunctionName("SubmitOrder")]
-    public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "orders")] HttpRequest req,
-        [ServiceBus("orders", Connection = "ServiceBusConnection")] IAsyncCollector<OrderMessage> orders,
-        ILogger log)
+    [Function("SubmitOrder")]
+    public async Task<SubmitOrderOutput> Run(
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "orders")] HttpRequest req)
     {
         OrderRequest? request;
         try
         {
-            // Newtonsoft.Json honours [JsonProperty("customer_id")] on OrderRequest.
-            using var reader = new StreamReader(req.Body);
-            request = JsonConvert.DeserializeObject<OrderRequest>(await reader.ReadToEndAsync());
+            // System.Text.Json now. Body I/O must be async: synchronous reads throw under
+            // ASP.NET Core integration.
+            request = await req.ReadFromJsonAsync<OrderRequest>(req.HttpContext.RequestAborted);
         }
         catch (JsonException)
         {
@@ -31,13 +28,30 @@ public sealed class SubmitOrder
         var errors = OrderValidator.Validate(request);
         if (errors.Count > 0)
         {
-            return new BadRequestObjectResult(new { errors });
+            // Order stays null, so nothing is written to the queue.
+            return new SubmitOrderOutput { Result = new BadRequestObjectResult(new { errors }) };
         }
 
         var order = OrderMessage.From(request!, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
-        await orders.AddAsync(order);
 
-        log.LogInformation("Accepted order {OrderId} for customer {CustomerId}", order.OrderId, order.CustomerId);
-        return new AcceptedResult($"/api/orders/{order.OrderId}", new { orderId = order.OrderId });
+        logger.LogInformation("Accepted order {OrderId} for customer {CustomerId}", order.OrderId, order.CustomerId);
+        return new SubmitOrderOutput
+        {
+            Result = new AcceptedResult($"/api/orders/{order.OrderId}", new { orderId = order.OrderId }),
+            Order = order,
+        };
     }
+}
+
+/// <summary>
+/// IAsyncCollector parameters are gone. With more than one output, the function returns a type
+/// whose properties carry the output bindings.
+/// </summary>
+public sealed class SubmitOrderOutput
+{
+    [HttpResult]
+    public required IActionResult Result { get; init; }
+
+    [ServiceBusOutput("orders", Connection = "ServiceBusConnection")]
+    public OrderMessage? Order { get; init; }
 }

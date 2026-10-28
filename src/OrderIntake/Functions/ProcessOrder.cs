@@ -1,29 +1,23 @@
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.ServiceBus;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using OrderIntake.Core;
 using OrderIntake.Services;
 
 namespace OrderIntake.Functions;
 
-public sealed class ProcessOrder
+public sealed class ProcessOrder(IOrderStore store, ILogger<ProcessOrder> logger)
 {
-    // Case-insensitive on purpose: the producer and the consumer may run different serializers
-    // during a deployment, and messages already in the queue must still be readable.
+    // Case-insensitive on purpose: during cut-over the queue still holds messages written by the
+    // in-process producer (Newtonsoft, PascalCase). The isolated consumer must read both shapes.
     private static readonly JsonSerializerOptions MessageJson = new(JsonSerializerDefaults.Web);
 
-    private readonly IOrderStore _store;
-
-    public ProcessOrder(IOrderStore store) => _store = store;
-
-    [FunctionName("ProcessOrder")]
+    [Function("ProcessOrder")]
     public async Task Run(
         [ServiceBusTrigger("orders", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
         ServiceBusReceivedMessage message,
         ServiceBusMessageActions messageActions,
-        ILogger log,
         CancellationToken cancellationToken)
     {
         OrderMessage? order;
@@ -38,7 +32,7 @@ public sealed class ProcessOrder
                 message,
                 deadLetterReason: "InvalidJson",
                 deadLetterErrorDescription: ex.Message);
-            log.LogWarning("Dead-lettered message {MessageId}: invalid JSON", message.MessageId);
+            logger.LogWarning("Dead-lettered message {MessageId}: invalid JSON", message.MessageId);
             return;
         }
 
@@ -48,16 +42,16 @@ public sealed class ProcessOrder
                 message,
                 deadLetterReason: "MissingFields",
                 deadLetterErrorDescription: "orderId and customerId are required.");
-            log.LogWarning("Dead-lettered message {MessageId}: missing fields", message.MessageId);
+            logger.LogWarning("Dead-lettered message {MessageId}: missing fields", message.MessageId);
             return;
         }
 
         // Transient failures throw here. The message is not completed, its lock expires,
         // and Service Bus redelivers it until MaxDeliveryCount moves it to the dead-letter queue.
-        await _store.UpsertAsync(order, cancellationToken);
+        await store.UpsertAsync(order, cancellationToken);
         await messageActions.CompleteMessageAsync(message);
 
-        log.LogInformation(
+        logger.LogInformation(
             "Stored order {OrderId} (delivery {DeliveryCount})",
             order.OrderId,
             message.DeliveryCount);
