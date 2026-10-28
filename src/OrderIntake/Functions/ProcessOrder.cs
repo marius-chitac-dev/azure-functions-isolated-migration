@@ -9,10 +9,6 @@ namespace OrderIntake.Functions;
 
 public sealed class ProcessOrder(IOrderStore store, ILogger<ProcessOrder> logger)
 {
-    // Case-insensitive on purpose: during cut-over the queue still holds messages written by the
-    // in-process producer (Newtonsoft, PascalCase). The isolated consumer must read both shapes.
-    private static readonly JsonSerializerOptions MessageJson = new(JsonSerializerDefaults.Web);
-
     [Function("ProcessOrder")]
     public async Task Run(
         [ServiceBusTrigger("orders", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
@@ -23,7 +19,8 @@ public sealed class ProcessOrder(IOrderStore store, ILogger<ProcessOrder> logger
         OrderMessage? order;
         try
         {
-            order = message.Body.ToObjectFromJson<OrderMessage>(MessageJson);
+            // Case-insensitive: reads messages from both the in-process and the isolated producer.
+            order = message.Body.ToObjectFromJson<OrderMessage>(OrderMessageJson.Options);
         }
         catch (JsonException ex)
         {
