@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OrderIntake.Services;
 
 var builder = FunctionsApplication.CreateBuilder(args);
@@ -15,6 +16,23 @@ builder.ConfigureFunctionsWebApplication();
 builder.Services
     .AddApplicationInsightsTelemetryWorkerService()
     .ConfigureFunctionsApplicationInsights();
+
+// The Application Insights SDK adds a provider rule that keeps only Warning and above.
+// Without removing it, every LogInformation call in the functions silently disappears.
+builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
+{
+    var defaultRule = options.Rules.FirstOrDefault(rule =>
+        rule.ProviderName == "Microsoft.Extensions.Logging.ApplicationInsights.ApplicationInsightsLoggerProvider");
+    if (defaultRule is not null)
+    {
+        options.Rules.Remove(defaultRule);
+    }
+});
+
+// host.json's logLevel section only reaches the host, so worker log levels are set here.
+// This app's own categories keep the Information default; the ASP.NET Core pipeline that
+// serves the HTTP trigger is capped at Warning.
+builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
 // What FunctionsStartup.Configure used to register.
 builder.Services.AddSingleton(_ => new CosmosClient(
