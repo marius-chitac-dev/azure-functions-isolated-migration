@@ -1,0 +1,56 @@
+# Local emulators for running the function app with `func start`:
+# - Azurite for AzureWebJobsStorage
+# - the Azure Service Bus emulator (and the SQL Server it needs), adapted from
+#   https://learn.microsoft.com/en-us/azure/service-bus-messaging/test-locally-with-service-bus-emulator
+# Values come from .env next to this file: copy .env.example and fill it in.
+# Cosmos DB isn't here: use the Windows Cosmos DB emulator.
+name: orderintake-local
+services:
+  azurite:
+    container_name: azurite
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    # The Functions host's storage SDK can be newer than Azurite; don't reject its API version.
+    command: azurite -l /data --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+
+  servicebus:
+    container_name: servicebus-emulator
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    volumes:
+      - "./servicebus-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
+    ports:
+      - "5672:5672"
+      - "5300:${EMULATOR_HTTP_PORT:-5300}"
+    environment:
+      SQL_SERVER: mssql
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      ACCEPT_EULA: ${ACCEPT_EULA}
+      EMULATOR_HTTP_PORT: ${EMULATOR_HTTP_PORT:-5300}
+    depends_on:
+      - mssql
+    networks:
+      sb-emulator:
+        aliases:
+          - "sb-emulator"
+
+  mssql:
+    container_name: servicebus-mssql
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: ${ACCEPT_EULA}
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+    networks:
+      sb-emulator:
+        aliases:
+          - "mssql"
+
+volumes:
+  azurite-data:
+
+networks:
+  sb-emulator:
