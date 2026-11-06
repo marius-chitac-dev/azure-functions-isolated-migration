@@ -19,18 +19,26 @@ public static class OrderValidator
             errors.Add("customer_id is required.");
         }
 
-        if (request.Items.Count == 0)
+        // "items": null and "items": [null] deserialize to nulls despite the initializer.
+        var items = request.Items ?? [];
+        if (items.Count == 0)
         {
             errors.Add("At least one item is required.");
         }
-        else if (request.Items.Count > MaxLines)
+        else if (items.Count > MaxLines)
         {
             errors.Add($"An order can have at most {MaxLines} items.");
         }
 
-        for (var i = 0; i < request.Items.Count; i++)
+        for (var i = 0; i < items.Count; i++)
         {
-            var line = request.Items[i];
+            var line = items[i];
+            if (line is null)
+            {
+                errors.Add($"items[{i}] is required.");
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(line.Sku))
             {
                 errors.Add($"items[{i}].sku is required.");

@@ -38,6 +38,20 @@ public class RequestContractTests
         Assert.Null(request!.CustomerId);
     }
 
+    /// <summary>
+    /// The Items initializer doesn't protect against an explicit null on the wire:
+    /// System.Text.Json assigns it. Validation must report it instead of throwing.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"customer_id":"c-42","items":null}""", "At least one item is required.")]
+    [InlineData("""{"customer_id":"c-42","items":[null]}""", "items[0] is required.")]
+    public void Null_items_are_reported_not_thrown(string json, string expectedError)
+    {
+        var request = JsonSerializer.Deserialize<OrderRequest>(json, WebJson);
+
+        Assert.Contains(expectedError, OrderValidator.Validate(request));
+    }
+
     private sealed class LegacyOrderRequest
     {
         [Newtonsoft.Json.JsonProperty("customer_id")]
