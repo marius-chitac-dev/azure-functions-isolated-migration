@@ -69,7 +69,7 @@ Requirements: .NET 10 SDK, Azure Functions Core Tools v4, Docker (with the WSL 2
     docker compose -f local/docker-compose.yaml up -d
     ```
 
-3. Start the Cosmos DB emulator, then create the app's settings and the `shop` database with its `orders` container. The example settings already point at all three emulators.
+3. Start the Cosmos DB emulator, then create the app's settings and the `shop` database with its `orders` container. The example settings already point at all three emulators. The `AccountKey` in them isn't a leaked secret: it's the Cosmos DB emulator's fixed key, the same for every installation and [published by Microsoft](https://learn.microsoft.com/en-us/azure/cosmos-db/emulator#authentication).
 
     ```bash
     cp src/OrderIntake/local.settings.example.json src/OrderIntake/local.settings.json
